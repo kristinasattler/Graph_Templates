@@ -9,8 +9,10 @@ All graphs have simple summary statistics included
 - Save statistics results to the original Excel file 
 - Save plot file to the working directory
 #### Code B 
-- ANOVA/Tukey's HSD
-- Aligned bar chart
+- One-way ANOVA with three or more samples
+- Aligned Bar/Dot Plot with statistical comparisons
+- Save statistics results to the original Excel file
+- Save plot file to the working directory
 #### Code C 
 - Calculations
   - Cell Counting
