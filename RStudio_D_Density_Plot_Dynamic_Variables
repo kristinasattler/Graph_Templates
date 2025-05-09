@@ -1,0 +1,391 @@
+---
+title: "RStudio_D_Density_Plot_Dynamic_Variables"
+author: "Kristina Sattler"
+date: "2025-3-12"
+output: html_document
+---
+# ========================================================================================================================================================= 
+# Chunk 00 - Install or update packages (if needed)
+# ========================================================================================================================================================= 
+```{r  Chunk, 00 eval=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+install.packages("summarytools")
+install.packages("moments")
+install.packages("tidyr")
+install.packages("openxlsx")
+install.packages("dplyr")
+install.packages("ggplot2")
+install.packages("ggpubr")
+install.packages("ggtext")
+install.packages("rstatix")
+install.packages("shiny")
+install.packages("colourpicker")
+install.packages("tibble")
+```
+# ========================================================================================================================================================= 
+# Chunk 0 - Load packages and set working directory
+# ========================================================================================================================================================= 
+```{r Chunk 0, message=FALSE}
+library(summarytools)
+library(moments)
+library(tidyr)
+library(openxlsx)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(ggtext)
+library(rstatix)
+library(shiny)
+library(colourpicker)
+library(tibble)
+options(scipen = 999)                       # Converts all numbers to standard notation
+knitr::opts_chunk$set(echo = TRUE)          # TRUE = all code chunks will be rendered in an HTML file by default
+knitr::opts_knit$set(root.dir =             # Set knitr working directory
+      "/Users/kristiesattler/Desktop/R_Files/Data")   # Write pathway- make sure the data file is in this directory!
+getwd()                                     # Print the current working directory 
+```
+# ========================================================================================================================================================= 
+# Chunk 1 - Open data file and set dynamic variables
+# ========================================================================================================================================================= 
+# Set dynamic variables here:
+
+# - V_Condition_Column = Name of the column containing experimental group names
+# 	- Do not use hyphens!
+# - V_Data_Column = Name of the column containing data values
+# - V_Exp_Group = Names of experimental groups listed in the condition column
+# 	- DO NOT use hyphens here!
+# -  Graph and axis titles = Set the name of the graph and axis titles
+# 	- Spaces and hyphens are okay here
+# 	- For superscripts and/or Greek letters, do NOT surround the title in quotes:
+# 		- expression(mm\^2)
+# 		- expression(576 \~ mu \* m\^2)
+        
+```{r Chunk 1}
+# Open data file with openxlsx and create an object
+S_file_path <- "/Volumes/LEPPERLAB/Dystrophin/Analysis"    # List the pathway to the raw data file [excluding the file]
+S_file_path_file <- "/Volumes/LEPPERLAB/Dystrophin/Analysis/Dystrophin_Quantifications.xlsx"      # List the pathway to the raw data file [including the file]
+A_raw_data <- read.xlsx(S_file_path_file,           # Open the raw data file
+                        sheet = "Left",             # Specify sheet (if applicable)
+#                        rows = 1:4,                 # Specify rows (if applicable) *note: includes a header row
+                        cols = 1:4                  # Specify columns (if applicable)
+                        )
+
+# Set names of dynamic variables
+V_Condition_ColumnA <- "Genotype"                 # Set the dynamic variable with the name of the condition column
+V_Condition_ColumnB <- "Mouse"
+V_Condition_ColumnC <- "Variable"
+V_Variable_1 <- "MinFeret"
+V_Variable_2 <- "Area"
+V_Data_Column <- "Value"                      # Set the dynamic variable with the name of the column containing data
+# Name experimental groups- add more groups as needed
+V_Exp_Group1 <- "Control"                      # Set the dynamic variable to name Experimental group 1
+V_Exp_Group2 <- "Utrophin Tg"                   # Set the dynamic variable to name Experimental group 2
+V_Exp_Group3 <- "mdx"                       # Set the dynamic variable to name Experimental group 3
+V_Exp_Group4 <- "mdx + UTR Tg"              # Set the dynamic variable to name Experimental group 4
+
+V_Graph_Title <- "Uninjured MinFeret"       # Set the dynamic variable for the title of the graph
+V_X_Axis_Title <- "MinFeret"                # Set the dynamic variable for the name of the X axis of the graph {NULL if no title}
+V_Y_Axis_Title <- "Density"                 # Set the dynamic variable for the name of the Y axis of the graph
+
+V_Group_List <- c(V_Exp_Group1,             # Collate groups into a list for later comparisons- add groups as needed 
+                  V_Exp_Group2,             #   by adding a comma after group 3 and continuing the list
+                  V_Exp_Group3,
+                  V_Exp_Group4
+                  )
+
+Z_set_condition_factors <- function(df) {
+  df[[V_Condition_ColumnA]] <- as.factor(df[[V_Condition_ColumnA]])  # Set condition column as a factor
+  df[[V_Condition_ColumnA]] <- factor(df[[V_Condition_ColumnA]],     # Set the levels (order) of the experimental groups
+                                      levels = c(V_Exp_Group1,       # Call the dynamic variable of experimental group 1
+                                                 V_Exp_Group2,       # Call the dynamic variable of experimental group 2
+                                                 V_Exp_Group3,       # Call the dynamic variable of experimental group 3
+                                                 V_Exp_Group4        # Call the dynamic variable of experimental group 3
+                                      ))
+  df[[V_Condition_ColumnB]] <- as.factor(df[[V_Condition_ColumnB]])  # Set condition column as a factor
+  return(df)
+}
+```
+# ========================================================================================================================================================= 
+# Chunk 2 - Simple summary statistics
+# ========================================================================================================================================================= 
+# -   [Options for summary statistics](https://docs.google.com/document/d/12yir4iAo4Y_E7MXwwrNkXOmGA0i5PhgYC6ubD6SwfOs/edit?tab=t.rwcqfu7xrpqt)
+
+```{r Chunk 2, message=FALSE}
+Ab_long_data <- A_raw_data %>%
+  pivot_longer(
+    cols = all_of(c(V_Variable_1, V_Variable_2)),   # Dynamically reference columns to summarize
+    names_to = V_Condition_ColumnC,                 # New column indicating the variable
+    values_to = V_Data_Column                       # New column indicating the value
+  )
+A_raw_data <- Z_set_condition_factors(A_raw_data)         # Set factors and factor levels for A_raw_data
+Ab_long_data <- Z_set_condition_factors(Ab_long_data)     # Set factors and factor levels for Ab_long_data
+
+B_summary <- Ab_long_data %>%
+  group_by(.data[[V_Condition_ColumnB]], 
+           .data[[V_Condition_ColumnA]], 
+           .data[[V_Condition_ColumnC]]) %>%
+  summarise(
+    Mean = mean(Value, na.rm = TRUE),
+    n = n(),
+    SD = sd(Value, na.rm = TRUE),
+    SE = SD / sqrt(n),
+    Median = median(Value, na.rm = TRUE),
+    Range = max(Value, na.rm = TRUE) - min(Value, na.rm = TRUE),
+    Min = min(Value, na.rm = TRUE),
+    Max = max(Value, na.rm = TRUE),
+    CV = SD / Mean * 100,
+    Skewness = skewness(Value, na.rm = TRUE),
+    Kurtosis = kurtosis(Value, na.rm = TRUE),
+    CI_Lower = Mean - 1.96 * SE,
+    CI_Upper = Mean + 1.96 * SE,
+    Variance = var(Value, na.rm = TRUE),
+    Max_Density = max(density(Value, na.rm = TRUE)$y),
+  )
+Bb_summary <- B_summary %>%
+  group_by(.data[[V_Condition_ColumnA]], 
+           .data[[V_Condition_ColumnC]]) %>% 
+  summarise(
+    Mean = mean(Mean, na.rm = TRUE),
+    n = n(),
+    SD = sd(SD, na.rm = TRUE),
+    SE = SD / sqrt(n),
+    Median = median(Median, na.rm = TRUE),
+    Range = max(Range, na.rm = TRUE) - min(Range, na.rm = TRUE),
+    Min = min(Min, na.rm = TRUE),
+    Max = max(Max, na.rm = TRUE),
+    CV = SD / Mean * 100,
+    Skewness = skewness(Skewness, na.rm = TRUE),
+    Kurtosis = kurtosis(Kurtosis, na.rm = TRUE),
+    CI_Lower = Mean - 1.96 * SE,
+    CI_Upper = Mean + 1.96 * SE,
+    Variance = var(Variance, na.rm = TRUE),
+    Max_Density = max(density(Max_Density, na.rm = TRUE)$y),
+  )
+B_summary_filtered <- B_summary %>%
+  filter(Variable == V_Variable_1)
+```
+# ========================================================================================================================================================= 
+# Chunk 3 - Run ANOVA and Tukey HSD
+# ========================================================================================================================================================= 
+```{r Chunk 3}
+# Generte pairwise comparisons 
+C_group_pairs <- as.list(                             # Converts the data frame back into a list of vectors
+  as.data.frame(                                      # Wraps that list in a data frame where each column is a pair
+    combn(V_Group_List,                               # Call V-Group_List
+          2,                                          # Generate all 2-element combinations from the list
+          simplify = FALSE                            # Return a list of character vectors rather than a matrix
+          )))
+
+Cb_pairwise_results_df <- lapply(C_group_pairs,       # Create a new data frame with comparisons from C_group_pairs
+                                 function(pair) {     # Vector of Condition_Column_Names to be compared
+  C_subset_data <- B_summary_filtered %>%                     # Filter data for the specified pairs of groups in C_group_pairs
+    filter(.data[[V_Condition_ColumnA]] %in% pair)    # Filter the original dataset to only include comparisons in C_group_pairs
+  C_test_result <- TukeyHSD(aov(                      # Run the ANOVA and TukeyHSD tests
+    as.formula(paste("Mean", 
+                     "~", 
+                     V_Condition_ColumnA)),           # compare the data grouped by the Condition column
+    data = C_subset_data))                            # Data for the test comes from C_subset_data
+  as.data.frame(C_test_result[[V_Condition_ColumnA]]) # Convert results into a single data frame 
+}) %>%                                                # Pipe operator
+  bind_rows()                                         # Combine all results produced by lapply() into one data frame
+```
+# ========================================================================================================================================================= 
+# Chunk 4 - Collate results into a data frame
+# ========================================================================================================================================================= 
+# Set graph dimensions here:
+
+# - D_results
+# 	- label = Significance labels
+#   - y.position = Y-position of comparison bars 
+# 	- tip_length = length of tips of comparison bars 
+# 	- y_limit = height of the Y-axis
+# 		-	To set the Y-axis height as the maximum data value + 10% (ggplot default), paste the code below to the y_limit argument
+#     -	y_limit = max(.data[[V_Data_Column]], na.rm = TRUE) \* 1.1, - Margin between Y axis values and title [1 is usually fine]
+# - B_summary
+# 	- Colors for experimental groups - use hex code
+# 	- Paste the code below into the console to open the color picker and find colors:
+
+ui <- fluidPage(
+  colourInput("color", 
+  "Choose a color:", 
+  value = "#FF0000"),
+  textOutput("hex_code")
+)
+
+server <- function(input, output) {
+  output$hex_code <- renderText({
+    paste("Selected Hex Code:", 
+    input$color)
+  })
+}
+
+shinyApp(ui, server)
+
+```{r Chunk 4}
+D_results <- purrr::map_df(                         # Creates a new data frame; applies function to each element of a list
+  C_group_pairs, ~ data.frame(                      # Propagates pairs from C_group_pairs
+    Group1 = .x[1], Group2 = .x[2]))                # Creates a data frame with two columns of pairs
+
+E_tukey <- Cb_pairwise_results_df %>%               # Calls data frame and pipes it into the following functions
+  rownames_to_column(var = "comparison") %>%        # Converts row names to a new column called "comparison"
+  separate(comparison,                              # Splits the comparison column into two columns
+           into = c("group1", "group2"),            # Specifies new columns to propagate
+           sep = "-") %>%                           # Identifies the character separating the each group
+  select(group1, group2, `p adj`, diff, lwr, upr)   # Specifies columns to add to the final data frame
+
+D_results <- E_tukey %>%                    # Add elements to the test result data frame
+  mutate(                                   # Create a new column
+    label = case_when(                      # Set the label under these Conditions
+      `p adj` <= 0.0001 ~ "****",           # If the p-value is < 0.001, label with ****
+      `p adj` <= 0.001 ~ "***",             # If the p-value is < 0.01, label with ***
+      `p adj` <= 0.01 ~ "**",               # If the p-value is < 0.01, label with **
+      `p adj` <= 0.05 ~ "*",                # If the p-value is < 0.05, label with *
+      TRUE ~ "ns"                           # If the p-value is > 0.05, label with ns
+   )) 
+B_summary <- B_summary %>%                                        # Add info to the B_summary data frame
+  mutate(                                                         # Function to create new column(s)
+    Colors = case_when(                                           # Name the column and set the value under these conditions
+      .data[[V_Condition_ColumnA]] == V_Exp_Group1 ~ "#00bd79",    # Set the color of Experimental Group 1
+      .data[[V_Condition_ColumnA]] == V_Exp_Group2 ~ "#46bec6",    # Set the color of Experimental Group 2
+      .data[[V_Condition_ColumnA]] == V_Exp_Group3 ~ "#3a8fff",    # Set the color of Experimental Group 3
+      .data[[V_Condition_ColumnA]] == V_Exp_Group4 ~ "#0f4e87",   # Set the color of Experimental Group 3
+    ))
+V_Colors <- setNames(B_summary[["Colors"]],            # Create a dynamic variable from the color column to assign to the plot
+                     B_summary[[V_Condition_ColumnA]]) 
+```
+# ========================================================================================================================================================= 
+# Chunk 5 - Create the density plot
+# ========================================================================================================================================================= 
+```{r Chunk 5}
+S_Density_Plot <- ggplot(A_raw_data, 
+       aes(x = .data[[V_Variable_1]], 
+           color = .data[[V_Condition_ColumnA]])) +
+  geom_density(linewidth = 1) +
+  labs(
+    title = V_Graph_Title,
+    x = V_Variable_1,
+    y = V_Y_Axis_Title
+  ) +
+  theme_classic() +                                   # Set the theme of the plot
+  scale_color_manual(values = c(V_Colors)) +          # Customize line colors
+  theme(                                              # Set appearance of components of the chart
+    plot.title = element_text(                        #  Set visual parameters of the chart title
+			family = "Helvetica",                           #   Set font
+      face = "bold",                                  #   Set bold
+			size = 10,                                      #   Set size
+			hjust = 0,                                      #   Set horizontal justification
+      ), 
+    axis.text.y = element_text(                       #  Set visual parameters of the y-axis text
+			family = "Helvetica",                           #   Set font 
+      face = "bold",                                  #   Set bold
+      size = 10,                                      #   Set size 
+      ),
+    axis.text.x = element_text(                       #  Set visual parameters of the x-axis label text
+      family = "Helvetica",                           #   Set font 
+      face = "bold",                                  #   Set bold
+      size = 10,                                      #   Set size 
+			#hjust = 1,                                      #   Set horizontal justification
+      #angle = 45,                                     #   Set angle
+      ),
+    axis.title.y = element_text(                      #  Set visual parameters of the y-axis title
+      family = "Helvetica",                           #   Set font 
+      face = "bold",                                  #   Set bold
+      size = 10,                                      #   Set size 
+			margin = margin(r = 1),                         #   Set the distance of the y-axis title to the axis
+      ),
+    axis.title.x = element_text(                      #  Set visual parameters of the y-axis title
+      family = "Helvetica",                           #   Set font 
+      face = "bold",                                  #   Set bold
+      size = 10,                                      #   Set size 
+      margin = margin(r = 1),                         #   Set the distance of the y-axis title to the axis
+      ),
+    plot.margin = unit(c(0.2,0.2,0.2,0.2), "lines"),  #  Set the margins of the plot: Top, Right, Bottom, Left
+    legend.position = "none"                          #  Remove the legend
+    ) +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_y_continuous(                                 # Set the appearance of the y-axis
+    expand = c(0, 0),                                 #  Set the amount of white space around the y-axis
+    limits = c(0, 0.036),                             #  Set the range of the y-axis to 5% higher than the max density value
+    #breaks = seq(0, 0.027, 0.005)                     #  Set the height and tick mark intervals of the y-axis
+  ) 
+S_Density_Plot
+print(D_results[c("group1", "group2", "label")])
+```
+# ========================================================================================================================================================= 
+# Chunk 6 - Save the plot and stats results
+# ========================================================================================================================================================= 
+```{r Chunk 6}
+B_summary <- B_summary %>%             # Prepare B_summary to merge with F_results
+  mutate(Source = paste("B_summary",   # Create a column called "Source" to specify the origin of the data
+                        row_number(),  # Specify which row(s) to include
+                        sep = "_"))    # Specify the data separator
+Bb_summary <- Bb_summary %>%           # Prepare B_summary to merge with F_results
+  mutate(Source = paste("Bb_summary",  # Create a column called "Source" to specify the origin of the data
+                        row_number(),  # Specify which row(s) to include
+                        sep = "_"),    # Specify the data separator
+         Mouse = V_Condition_ColumnA)
+Bc_combined_summary <- bind_rows(B_summary, Bb_summary) # Combine the two data frames
+
+D_results <- D_results %>%             # Prepare F_results to merge with B_summary
+  mutate(Source = paste("D_results",   # Create a column called "Source" to specify the origin of the data
+                        row_number(),  # Specify which row(s) to include
+                        sep = "_"),    # Specify the data separator
+         Mouse = NA,                   # Set the value of these columns (from B_summary)
+         Mean = NA,                    #    to "NA" so the dimensions of the data frame match
+         SD = NA,
+         n = NA, 
+         SE = NA,
+         Median = NA,
+         Range = NA,
+         Min = NA,
+         Max = NA,
+         CV = NA,
+         Skewness = NA,
+         Kurtosis = NA,
+         CI_Lower = NA,
+         CI_Upper = NA,
+         Variance = NA,
+         Colors = NA,
+         Max_Density = NA,
+)
+S_combined_df <- bind_rows(Bc_combined_summary, 
+                           D_results)      # Combine the two data frames
+rownames(S_combined_df) <- NULL            # Remove pre-existing row names
+
+Sb_wb <- loadWorkbook(S_file_path)         # Load the Excel file
+Sc_sheet_name <- paste0(gsub(              # Set the name of the new sheet to be created or updated as a dynamic variable
+  " ", "_",                                # Substitute spaces in the graph title and replace with underscores
+  V_Graph_Title),                          # Call the graph title dynamic variable 
+  "_Summary_Stats")                        # Add _Summary_Statistics to the sheet name
+if (Sc_sheet_name %in% names(Sb_wb)) {     # Check to see if the sheet already exists
+writeData(Sb_wb, 
+          sheet = Sc_sheet_name, 
+          S_combined_df, 
+          colNames = TRUE, 
+          rowNames = FALSE)
+} else {
+  addWorksheet(Sb_wb, 
+               Sc_sheet_name)              # If the sheet does not exist, create it and add data
+  writeData(Sb_wb, 
+            sheet = Sc_sheet_name, 
+            S_combined_df, 
+            colNames = TRUE, 
+            rowNames = FALSE)
+}
+saveWorkbook(Sb_wb, 
+             S_file_path, 
+             overwrite = TRUE)
+
+# Save the plot; available file type options: .pdf .tiff .png .jpeg
+ggsave(paste0(S_file_path,                 # Save the plot - call the path to the directory to save the file 
+              "/",                         # Separate the file path and the file name with a /
+              gsub(" ", "_",               # Replace spaces in the graph title with underscores
+                   V_Graph_Title),         # Call the graph title to name the plot
+              "_Density_Plot.png"),        # Specify file type
+       plot = S_Density_Plot,              # Specify which plot to save
+       dpi = 300,                          # Resolution in pixels [300 is typically good]
+       width = 5,                          # Width of the image
+       height = 4,                         # Height of the image
+       units = "in"                        # Units of the width and height. Available options: “in” or “cm”
+)
+```
