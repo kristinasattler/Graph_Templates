@@ -3,8 +3,11 @@ These are templates for making various types of graphs in RStudio \
 All graphs have simple summary statistics included
 
 #### Code A 
-- Student's t-test
-- Aligned bar chart
+- Unpaired student's t-test with three or more samples
+  - Compare each sample back to the control
+- Aligned bar chart with statistical comparisons
+- Save statistics results to the original Excel file 
+- Save plot file to the working directory
 #### Code B 
 - ANOVA/Tukey's HSD
 - Aligned bar chart
