@@ -14,4 +14,3 @@ All graphs have simple summary statistics included
 #### Code D 
 - ANOVA/Tukey's HSD
 - Density plot
-- 
