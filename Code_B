@@ -1,0 +1,386 @@
+---
+title: "RStudio_Code_B"
+author: "Kristina Sattler"
+date: "2025-03-21"
+output: html_document
+---
+
+# This code will generate:
+# - Simple summary statistics
+# - One-way ANOVA with three or more samples
+# - Aligned Bar/Dot Plot with statistical comparisons
+# - Save statistics results to the original Excel file and plot file to the working directory
+
+# Characters to be careful of with naming:
+# - [File names]{.underline}: avoid spaces, hyphens, periods, slashes, and commas
+# - [Experimental group/column names]{.underline}: avoid spaces, hyphens, periods
+# - [Graph titles/axis titles]{.underline}: spaces, hyphens, slashes, and periods are generally fine. If there are issues with running the code, switch to underscores
+
+# Prior to running any code, make sure all packages listed in Chunk 00 have been installed and loaded in Chunk 0
+
+# Chunk 00 - Install or update packages (if needed)
+
+```{r Chunk 00, eval=FALSE}
+install.packages("tidyverse")
+install.packages("openxlsx")
+install.packages("dplyr")
+install.packages("ggplot2")
+install.packages("ggpubr")
+install.packages("rstatix")
+install.packages("shiny")
+install.packages("colourPicker")
+```
+
+# Chunk 0 - Load packages and set working directory
+
+```{r Chunk 0, message=FALSE}
+library(tidyverse)
+library(openxlsx)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(rstatix)
+library(shiny)
+library(colourpicker)
+options(scipen = 999)                  # Converts all numbers to standard notation
+knitr::opts_knit$set(root.dir =        # Set the knitr working directory
+      "~/pathway/to/file/directory")   # Write pathway- make sure the data file is in this directory
+```
+
+# Chunk 1 - Open data file, set Conditions, and set Condition order
+
+# Set dynamic variables :
+# - V_Condition_Column = Name of the column containing experimental group names
+#   - Do not use hyphens!
+# - V_Data_Column = Name of the column containing data values
+# - V_Exp_Group = Names of experimental groups listed in the condition column
+#   - DO NOT use hyphens here!
+# - Graph and axis titles = Set the name of the graph and axis titles
+#   - Spaces and hyphens are okay here
+#   - For superscripts and/or Greek letters, do NOT surround the title in quotes:
+#     - expression(mm^2)
+#     - expression(576 * mu * m^2)
+
+```{r Chunk 1}
+# Open data file with openxlsx and create an object
+S_file_path <- "/pathway/to/folder"                             ## EDIT: List the pathway to the raw data file [excluding the file]
+S_file_path_file <- "/pathway/to/files/File_Name.xlsx"          ## EDIT: List the pathway to the raw data file [including the file]
+A_raw_data <- read.xlsx(S_file_path_file,                        # Open the raw data file
+                        sheet = "CN",                           ## EDIT: Specify sheet (if applicable)
+#                        rows = 1:4,                             ## EDIT (optional): Specify rows (if applicable) *note: includes a header row
+#                        cols = 1:2                              ## EDIT (optional): Specify columns (if applicable)
+                        )
+# Set names of dynamic variables
+V_Condition_Column <- "Genotype"                 ## EDIT: Set the dynamic variable with the name of the condition column
+V_Data_Column <- "CN"                            ## EDIT: Set the dynamic variable with the name of the column containing data
+
+# Name experimental groups- add more groups as needed. Add a # to comment out unneeded groups- be sure to comment out or delete all throughout the code!
+V_Exp_Group1 <- "Control"                        ## EDIT: Set the dynamic variable to name Experimental group 1
+V_Exp_Group2 <- "Utrophin"                       ## EDIT: Set the dynamic variable to name Experimental group 2
+V_Exp_Group3 <- "mdx+UTR"                        ## EDIT: Set the dynamic variable to name Experimental group 3
+V_Exp_Group4 <- "mdx"                            ## EDIT: Set the dynamic variable to name Experimental group 4
+
+V_Group_List <- c(V_Exp_Group1,                  # Collate groups into a list for later comparisons- add groups as needed 
+                  V_Exp_Group2,                  #   by adding a comma after group 3 and continuing the list
+                  V_Exp_Group3,
+                  V_Exp_Group4
+                  )
+V_Graph_Title <- "Central Nucleation"            ## EDIT: Set the dynamic variable for the title of the graph
+V_X_Axis_Title <- NULL                           ## EDIT: Set the dynamic variable for the name of the X axis of the graph {NULL if no title}
+V_Y_Axis_Title <- "Percent of Fibers"            ## EDIT: Set the dynamic variable for the name of the Y axis of the graph
+
+A_raw_data[[V_Condition_Column]] <- as.factor(A_raw_data[[V_Condition_Column]])       # Set condition column as a factor
+A_raw_data[[V_Condition_Column]] <- factor(A_raw_data[[V_Condition_Column]],          # Set the levels (order) of the experimental groups
+                                                levels = c(V_Exp_Group1,              # Call the dynamic variable of experimental group 1
+                                                           V_Exp_Group2,              # Call the dynamic variable of experimental group 2
+                                                           V_Exp_Group3,              # Call the dynamic variable of experimental group 3
+                                                           V_Exp_Group4               # Call the dynamic variable of experimental group 4
+                                                           ))
+```
+
+# Chunk 2 - Create a simple statistics summary of the data
+
+# - [Options for summary statistics](https://docs.google.com/document/d/12yir4iAo4Y_E7MXwwrNkXOmGA0i5PhgYC6ubD6SwfOs/edit?tab=t.rwcqfu7xrpqt)
+
+```{r Chunk 2}
+B_summary <- A_raw_data %>%                    # Create a new data frame called B_summary
+  group_by(.data[[V_Condition_Column]]) %>%    # Set the column to sort the groups by
+  summarise(                                   # Summarize these parameters for each group
+    Mean = mean(.data[[V_Data_Column]]),       # Calculate the mean value of each group
+    n = n(),                                   # Calculate the number of samples in each group
+    SD = sd(.data[[V_Data_Column]]),           # Calculate the standard deviation of each group
+    SE = SD / sqrt(n),                         # Calculate the standard error of each group
+    Min = min(.data[[V_Data_Column]]),         # Calculate the minimum value of each group
+    Max = max(.data[[V_Data_Column]])          # Calculate the maximum value of each group
+  )
+B_summary[[V_Condition_Column]] <- as.factor(B_summary[[V_Condition_Column]])       # Set condition column as a factor in B_summary
+B_summary[[V_Condition_Column]] <- factor(B_summary[[V_Condition_Column]],          # Set the levels (order) of the experimental groups
+                                           levels = c(V_Exp_Group1,                 # Call the dynamic variable of experimental group 1
+                                                      V_Exp_Group2,                 # Call the dynamic variable of experimental group 2
+                                                      V_Exp_Group3,                 # Call the dynamic variable of experimental group 3
+                                                      V_Exp_Group4                  # Call the dynamic variable of experimental group 4
+                                                      ))
+```
+
+# Chunk 3 - Set group pairs to be analyzed and create a data frame
+
+```{r Chunk 3}
+C_group_pairs <- as.list(as.data.frame(combn(V_Group_List, 2, simplify = FALSE)))
+
+Cb_pairwise_results_df <- lapply(C_group_pairs,        # Create a new data frame with the comparisons from C_group_pairs
+                                 function(pair) {      # Vector of Conditions to be compared
+  C_subset_data <- A_raw_data %>%                      # Filter data for the specified pairs of groups in C_group_pairs
+    filter(.data[[V_Condition_Column]] %in% pair)      # Filter the original dataset to only include comparisons in C_group_pairs
+  C_test_result <- TukeyHSD(aov(                       # Run the ANOVA and TukeyHSD tests
+    as.formula(paste(V_Data_Column,                    # Call data from the data column with the dynamic variable
+                     "~",                              # Specify separator as hyphen (-)
+                     V_Condition_Column)),             # Compare the data grouped by the condition column
+    data = C_subset_data))                             # Data for the test comes from C_subset_data
+  as.data.frame(C_test_result[[V_Condition_Column]])   # Convert results into a single data frame 
+}) %>%                                                 # Pipe operator
+  bind_rows()                                          # Combine all results produced by into one data frame
+```
+
+# Chunk 4 - Collate results into a data frame
+
+```{r Chunk 4}
+D_results <- purrr::map_df(                         # Creates a new data frame; applies function to each element of a list
+  C_group_pairs, ~ data.frame(                      # Propagates pairs from C_group_pairs
+    Group1 = .x[1], Group2 = .x[2]))                # Creates a data frame with two columns of pairs
+
+E_tukey <- Cb_pairwise_results_df %>%               # Calls data frame and pipes it into the following functions
+  rownames_to_column(var = "comparison") %>%        # Converts row names to a new column called "comparison"
+  separate(comparison,                              # Splits the comparison column into two columns
+           into = c("group1", "group2"),            # Specifies new columns to propagate
+           sep = "-") %>%                           # Identifies the character separating the each group
+  select(group1, group2, `p adj`, diff, lwr, upr)   # Specifies columns to add to the final data frame
+```
+
+# Chunk 5 - Set significance labels, colors, and dimensions of the graph 
+
+# Set Variables:
+# - D_results
+#   - label = Significance labels
+#   - y.position = Y-position of comparison bars
+#   - tip_length = length of tips of comparison bars
+#   - y_limit = height of the Y-axis
+#     - To set the Y-axis height as the maximum data value + 10% (ggplot default), paste the code below to the y_limit argument
+#     - y_limit = max(.data[[V_Data_Column]], na.rm = TRUE) \* 1.1,
+#   - Margin between Y axis values and title [1 is usually fine]
+# - B_summary
+#   - Colors for experimental groups - use hex code
+#     - Paste the code below into the console to open the color picker and find colors
+
+ui <- fluidPage(
+  colourInput("color", 
+  "Choose a color:", 
+  value = "#FF0000"),
+  textOutput("hex_code")
+)
+
+server <- function(input, output) {
+  output$hex_code <- renderText({
+    paste("Selected Hex Code:", 
+    input$color)
+  })
+}
+
+shinyApp(ui, server)
+
+```{r Chunk 5}
+D_results <- E_tukey %>%                    # Add elements to the test result data frame
+  mutate(                                   # Function to create new columns
+    label = case_when(                      # Name the column and set the value under these conditions
+      `p adj` <= 0.0001 ~ "****",           # If the "p adj" column is < 0.001, label with ****
+      `p adj` <= 0.001 ~ "***",             # If the "p adj" column is < 0.01, label with ***
+      `p adj` <= 0.01 ~ "**",               # If the "p adj" column is < 0.01, label with **
+      `p adj` <= 0.05 ~ "*",                # If the "p adj" column is < 0.05, label with *
+      TRUE ~ "ns"                           # If the "p adj" column is > 0.05, label with ns
+      ),
+    p_label = ifelse(                       # Create a new column with conditional requirements
+      `p adj` >= 0.05,                      # Specify the p adj cutoff for not significant
+      paste0("ns, `p adj`=",                # If p adj is not significant, paste the p-value along with ns
+             format(`p adj`, digits = 3)),  # Format the label as p adj pasted to three digits
+      label                                 # Use the label column for non-significant p-values
+      ),
+    y.position = c(7, 27, 88, 22, 83, 78),  ## EDIT: Set the y positions of the comparison bars/labels
+    tip_length = c(0.03),                   ## EDIT: Specify the length of the comparison bar tips
+    y_limit = 90,                           ## EDIT: Set the height of the Y axis (set in line 217)
+    margin = c(1)                           ## EDIT (optional): Set the value of the distance between y-axis and title
+    )
+B_summary <- B_summary %>%                                        # Add info to the B_summary data frame
+  mutate(                                                         # Function to create new column(s)
+    Colors = case_when(                                           # Name the column and set the value under these conditions
+      .data[[V_Condition_Column]] == V_Exp_Group1 ~ "#00bd79",   ## EDIT: Set the color of Experimental Group 1
+      .data[[V_Condition_Column]] == V_Exp_Group2 ~ "#46bec6",   ## EDIT: Set the color of Experimental Group 2
+      .data[[V_Condition_Column]] == V_Exp_Group3 ~ "#0f4e87",   ## EDIT: Set the color of Experimental Group 3
+      .data[[V_Condition_Column]] == V_Exp_Group4 ~ "#3a8fff",   ## EDIT: Set the color of Experimental Group 3
+    ))
+V_Colors <- setNames(B_summary[["Colors"]],                       # Create a dynamic variable from the color column to assign to the plot
+                     B_summary[[V_Condition_Column]]) 
+```
+
+# Chunk 6 - Create the Graph
+
+# - [Point Appearance Options](https://docs.google.com/document/d/12yir4iAo4Y_E7MXwwrNkXOmGA0i5PhgYC6ubD6SwfOs/edit?usp=sharing)
+# - [Plot Theme Options](https://docs.google.com/document/d/12yir4iAo4Y_E7MXwwrNkXOmGA0i5PhgYC6ubD6SwfOs/edit?usp=sharing)
+
+```{r - Chunk 6}
+S_aligned_dot_plot <- ggdotplot(                       # Create the aligned dot plot using ggdotplot function
+  A_raw_data,                                          # Call the raw data frame
+  x = V_Condition_Column,                              # Set the x-axis to the conditions column dynamic variable
+  y = V_Data_Column,                                   # Set the y-axis to the data column dynamic variable
+  dotsize = 0,                                         # Sets the size of the data dots from ggdotplot to 0
+  binwidth = 1                                         # Control the spacing between groups
+  ) +
+  geom_col(                                            # Add bars displaying the average value of each group
+    data = B_summary,                                  # Call data from the B_summary data frame
+    aes(x = .data[[V_Condition_Column]],               # Set the aesthetic characteristics and call the condition column dynamic variable
+        y = Mean,                                      # Set the Y value of each bar to the mean of each group
+        fill = .data[[V_Condition_Column]]),           # Fill the bars with data from the condition column dynamic variable
+    color = "black",                                   # Outline the bars in black
+    width = 0.3,                                       # Set the width of the bars
+    alpha = 1,                                         # Set opacity of the bars
+  ) +
+  geom_point(                                          # Fill in data points- see above for appearance options
+    shape = 16,                                        # Set the shape of the data points
+    size = 1,                                          # Set the size of the data points
+  ) +
+  geom_errorbar(                                       # Create error bars
+    data = B_summary,                                  # Call data from B_summary 
+    aes(x = .data[[V_Condition_Column]],               # Fill data from the condition column dynamic variable
+        ymin = Mean - SE,                              # Set the minimum y value of the error bar
+        ymax = Mean + SE),                             # Set the maximum y value of the error bar
+    color = "black",                                   # Set the colors for error bars
+    width = 0.19,                                      # Set the width of the error bar ends
+    linewidth = 0.4,                                   # Set the thickness of the line
+    inherit.aes = FALSE                                # Do not inherit aesthetic characteristics from ggdotplot
+  ) +
+  labs(title = paste0(V_Graph_Title),                  # Set the title of the graph from the dynamic variable
+       x = V_X_Axis_Title,                             # Set the title of the x-axis from the dynamic variable [NULL if no title]
+       y = paste0(V_Y_Axis_Title),                     # Set the title of the y-axis from the dynamic variable
+       fill = NULL                                     # Remove ggdotplot shapes from the legend
+  ) +
+  scale_fill_manual(values = V_Colors) +               # Call colors variable to set experimental group colors
+  theme_classic2() +                                   # Set the appearance of the chart- see above for theme options
+  theme(                                               # Set appearance of specific components of the chart
+    plot.title = element_text(                         # Set visual parameters of the chart title
+      face = "bold",                                   # Set chart title text to bold
+      hjust = 0.35,                                    # Set horizontal justification of the title
+      size = 10,                                       # Set chart title text size
+      ),
+    axis.text.y = element_text(                        # Set visual parameters of the y-axis text
+      face = "bold",                                   # Set y-axis text to bold
+      size = 9,                                        # Set y-axis text size to 9
+      ),
+    axis.text.x = element_text(                        # Set visual parameters of the x-axis text
+      face = "bold",                                   # Set x-axis text to bold
+      size = 9,                                        # Set x-axis text size to 9
+#      hjust = 1,                                       # Set horizontal justification of the bar labels
+#      angle = 45,                                      # Set x-axis bar labels to 45^o angle
+      ),
+    axis.title.y = element_text(                       # Set visual parameters of the y-axis title
+      face = "bold",                                   # Set y-axis title text to bold 
+      size = 9,                                        # Set y-axis title text size to 9
+      margin = margin(r = 1),                          # Set the distance of the y-axis title to the axis
+      ),
+    plot.margin = unit(c(0.2,0.2,0.2,0.2), "lines"),   # Set the margins of the plot
+    legend.position = "none"                           # Remove the legend from the plot
+    ) +
+  scale_y_continuous(                                  # Set the appearance of the y-axis
+    expand = c(0, 0),                                  # Set the amount of white space around the y-axis
+    limits = c(0, D_results$y_limit[1])                # Set the range of the y-axis from the column in D_results
+#    breaks = seq(0, 9, 3)                              # Set the height and tick mark intervals of the y-axis
+  ) +
+  stat_pvalue_manual(                                  # Add comparison bars/labels from statistical analyses
+    D_results,                                         # Call data from D_results
+    label = "label",                                   # Label comparison bars from the p_label column
+    tip.length = D_results$tip_length[1],              # Call the tip length value(s) from D_results
+    size = 3.5,                                        # Set the size of the text of comparison labels
+    fontface = "bold",                                 # Set the text of comparison bars to bold
+    linewidth = 1,                                     # Set the width of the comparison bar lines
+  )
+S_aligned_dot_plot                                     # View the graph
+```
+
+# Chunk 7 - Save the plot and stats results
+# - File type options for saving plots: 
+#   - .pdf 
+#   - .tiff 
+#   - .png 
+#   - .jpeg
+
+```{r Chunk 7}
+# Merge data frames with stats results to the original Excel file
+B_summary <- B_summary %>%                 # Prepare B_summary to merge
+  mutate(Source =                          # Create a column called "Source" to specify the origin of the data
+           paste("B_summary",              # Paste data from B_summary
+                        row_number(),      # Specify which row(s) to include [() = all]
+                        sep = "_"          # Specify the data separator
+))
+D_results <- D_results %>%                 # Prepare D_results to merge
+  mutate(Source =                          # Create a column called "Source" to note the origin of the data
+           paste("D_results",              # Paste data from D_results
+                        row_number(),      # Specify which row(s) to include
+                        sep = "_"),        # Specify the data separator
+         Condition = NA,                   # Set the value of these columns (from B_summary)
+         Mean = NA,                        #    to "NA" so the dimensions of the data frames match
+         SD = NA, 
+         n = NA, 
+         SE = NA,
+         Min = NA,
+         Max = NA,
+         Colors = NA
+)
+F_combined_df <- bind_rows(                # Combine the two data frames into a new data frame
+  B_summary,                               # Call B_summary data frame
+  D_results                                # Call D_results data frame
+  )
+rownames(F_combined_df) <- NULL            # Remove pre-existing row names
+
+Sb_wb <- loadWorkbook(S_file_path_file)    # Load the Excel file containing the data
+Sc_sheet_name <- paste0(gsub(              # Set the name of the new sheet to be created or updated as a dynamic variable
+  " ", "_",                                # Substitute spaces in the graph title and replace with underscores
+  V_Graph_Title),                          # Call the graph title dynamic variable 
+  "_Summary_Statistics")                   # Add _Summary_Statistics to the sheet name
+if (Sc_sheet_name %in% names(Sb_wb)) {     # Check to see if the sheet already exists
+writeData(Sb_wb,                           # Specify the Excel file to search for the existing sheet
+          sheet = Sc_sheet_name,           # Specify what sheet name to search for
+          F_combined_df,                   # Call combined data frame 
+          colNames = TRUE,                 # Keep column names
+          rowNames = FALSE)                # Remove row names
+} else {                                   # If the sheet does not already exist, create it and add data
+  addWorksheet(Sb_wb, Sc_sheet_name)       # Specify the Excel file and sheet name to add
+  writeData(Sb_wb,                         # Specify the Excel file to add the sheet to write the data to 
+            sheet = Sc_sheet_name,         # Specify what to name the sheet
+            F_combined_df,                 # Call combined data frame 
+            colNames = TRUE,               # Keep column names
+            rowNames = FALSE)              # Remove row names
+}
+saveWorkbook(Sb_wb,                        # Save the new sheet to the existing Excel file 
+             S_file_path_file,             # Call the Excel file pathway
+             overwrite = TRUE)             # Overwrite data to this sheet
+
+ggsave(paste0(S_file_path,                 # Save the plot - call the path to the directory to save the file 
+              "/",                         # Separate the file path and the file name with a /
+              gsub(" ", "_",               # Replace spaces in the graph title with underscores
+                   V_Graph_Title),         # Call the graph title to name the plot
+              "_Plot.png"),               ## EDIT (optional): Specify file type
+       plot = S_aligned_dot_plot,          # Specify which plot to save
+       dpi = 300,                          # Resolution in pixels [300 is typically good]
+       width = 2,                          # Width of the image
+       height = 3,                         # Height of the image
+       units = "in"                        # Units of the width and height. Available options: “in” or “cm”
+)
+ggsave(paste0(S_file_path,                 # Save the plot - call the path to the directory to save the file 
+              "/",                         # Separate the file path and the file name with a /
+              gsub(" ", "_",               # Replace spaces in the graph title with underscores
+                   V_Graph_Title),         # Call the graph title to name the plot
+              "_Plot.pdf"),                # EDIT (optional): Specify file type
+       plot = S_aligned_dot_plot,          # Specify which plot to save
+       dpi = 300,                          # Resolution in pixels [300 is typically good]
+       width = 2,                          # Width of the image
+       height = 3,                         # Height of the image
+       units = "in"                        # Units of the width and height. Available options: “in” or “cm”
+)
+```
